@@ -2,6 +2,8 @@
 
 **Debian Kernel Patched for PC Engines' APU2**
 
+See [RELEASES.md](RELEASES.md) for included patches/features.
+
 ## Parallel Building
 
 ```sh

@@ -52,7 +52,7 @@ $(KCFG): | $(KSRC)
 	$|scripts/config --file $@ -M W1_MASTER_GPIO W1_MASTER_GPIO_CUSTOM
 
 $(KTAR):
-	sudo apt-get install build-essential linux-source
+	sudo apt-get install build-essential linux-source quilt
 	sudo apt-get build-dep linux
 
 Makefile:;

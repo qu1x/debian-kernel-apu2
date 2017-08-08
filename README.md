@@ -13,8 +13,7 @@ time make -j $(grep -c '^processor' /proc/cpuinfo)
 ## Installation
 
 ```sh
-sudo dpkg -i linux-image-*_amd64.deb
-sudo dpkg -i linux-headers-*_amd64.deb
+sudo dpkg -i linux-{image,headers}-$(uname -r)_$(uname -r)-1_amd64.deb
 ```
 
 ## License

@@ -1,0 +1,50 @@
+Description: Fix e1000e hung at stats update 
+Author: Arne Fitzenreiter <arne_f@ipfire.org>
+Last-Update: 2017-06-07
+---
+This patch header follows DEP-3: http://dep.debian.net/deps/dep3/
+--- a/drivers/net/ethernet/intel/e1000e/netdev.c
++++ b/drivers/net/ethernet/intel/e1000e/netdev.c
+@@ -5924,10 +5924,14 @@ struct rtnl_link_stats64 *e1000e_get_sta
+ 					     struct rtnl_link_stats64 *stats)
+ {
+ 	struct e1000_adapter *adapter = netdev_priv(netdev);
++	int has_lock = 0;
+ 
+ 	memset(stats, 0, sizeof(struct rtnl_link_stats64));
+-	spin_lock(&adapter->stats64_lock);
+-	e1000e_update_stats(adapter);
++	if (spin_trylock(&adapter->stats64_lock)) {
++		e1000e_update_stats(adapter);
++		has_lock = 1;
++	}
++
+ 	/* Fill out the OS statistics structure */
+ 	stats->rx_bytes = adapter->stats.gorc;
+ 	stats->rx_packets = adapter->stats.gprc;
+@@ -5957,7 +5961,7 @@ struct rtnl_link_stats64 *e1000e_get_sta
+ 
+ 	/* Tx Dropped needs to be maintained elsewhere */
+ 
+-	spin_unlock(&adapter->stats64_lock);
++	if (has_lock) spin_unlock(&adapter->stats64_lock);
+ 	return stats;
+ }
+ 
+--- a/drivers/net/ethernet/intel/igb/igb_main.c
++++ b/drivers/net/ethernet/intel/igb/igb_main.c
+@@ -5391,10 +5391,11 @@ static struct rtnl_link_stats64 *igb_get
+ {
+ 	struct igb_adapter *adapter = netdev_priv(netdev);
+ 
+-	spin_lock(&adapter->stats64_lock);
+-	igb_update_stats(adapter, &adapter->stats64);
++	if (spin_trylock(&adapter->stats64_lock)) {
++		igb_update_stats(adapter, &adapter->stats64);
++		spin_unlock(&adapter->stats64_lock);
++	}
+ 	memcpy(stats, &adapter->stats64, sizeof(*stats));
+-	spin_unlock(&adapter->stats64_lock);
+ 
+ 	return stats;
+ }

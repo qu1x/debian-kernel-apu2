@@ -17,6 +17,7 @@ KPKG := linux-source-$(shell echo $(KREL) | sed -E "s/([^.]+\.[^.]).+/\1/")
 KTAR := /usr/src/$(KPKG).tar.xz
 KSRC := $(KPKG)/
 KCFG := $(KSRC).config
+SCFG := $(KSRC)scripts/config --file $(KCFG)
 
 .PHONY: all
 all: | $(KCFG)
@@ -40,19 +41,19 @@ $(KSRC): | $(KTAR)
 	cd $@ && quilt --quiltrc ../quiltrc push -a
 
 $(KCFG): | $(KSRC)
-	cp /boot/config-$(KREL) $@
-	$|scripts/config --file $@ -e CONFIG_CFG80211_CERTIFICATION_ONUS
-	$|scripts/config --file $@ -e CONFIG_CFG80211_INTERNAL_REGDB
-	$|scripts/config --file $@ -d DEBUG_INFO
-	$|scripts/config --file $@ -m KEYBOARD_GPIO_POLLED
-	$|scripts/config --file $@ -M LEDS_MENF21BMC LEDS_APU2
-	$|scripts/config --file $@ -M LEDS_TRIGGER_HEARTBEAT LEDS_TRIGGER_NETDEV
-	$|scripts/config --file $@ -M LEDS_TRIGGER_NETDEV LEDS_TRIGGER_MORSE
-	$|scripts/config --file $@ -M GPIO_MOCKUP GPIO_NCT5104D
-	$|scripts/config --file $@ -M I2C_GPIO I2C_GPIO_CUSTOM
-	$|scripts/config --file $@ -m SPI_SPIDEV
-	$|scripts/config --file $@ -M SPI_GPIO SPI_GPIO_CUSTOM
-	$|scripts/config --file $@ -M W1_MASTER_GPIO W1_MASTER_GPIO_CUSTOM
+	cp /boot/config-$(KREL) $(KCFG)
+	$(SCFG) -e CONFIG_CFG80211_CERTIFICATION_ONUS
+	$(SCFG) -e CONFIG_CFG80211_INTERNAL_REGDB
+	$(SCFG) -d DEBUG_INFO
+	$(SCFG) -m KEYBOARD_GPIO_POLLED
+	$(SCFG) -M LEDS_MENF21BMC LEDS_APU2
+	$(SCFG) -M LEDS_TRIGGER_HEARTBEAT LEDS_TRIGGER_NETDEV
+	$(SCFG) -M LEDS_TRIGGER_NETDEV LEDS_TRIGGER_MORSE
+	$(SCFG) -M GPIO_MOCKUP GPIO_NCT5104D
+	$(SCFG) -M I2C_GPIO I2C_GPIO_CUSTOM
+	$(SCFG) -m SPI_SPIDEV
+	$(SCFG) -M SPI_GPIO SPI_GPIO_CUSTOM
+	$(SCFG) -M W1_MASTER_GPIO W1_MASTER_GPIO_CUSTOM
 	$(MAKE) -C $(KSRC) olddefconfig
 
 $(KTAR):

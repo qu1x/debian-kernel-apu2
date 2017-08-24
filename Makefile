@@ -35,11 +35,14 @@ distclean: clean
 
 $(KSRC): | $(KTAR)
 	tar -xaf $|
+	cp db.txt $@/net/wireless
 	cp -R debian $@
 	cd $@ && quilt --quiltrc ../quiltrc push -a
 
 $(KCFG): | $(KSRC)
 	cp /boot/config-$(KREL) $@
+	$|scripts/config --file $@ -e CONFIG_CFG80211_CERTIFICATION_ONUS
+	$|scripts/config --file $@ -e CONFIG_CFG80211_INTERNAL_REGDB
 	$|scripts/config --file $@ -d DEBUG_INFO
 	$|scripts/config --file $@ -m KEYBOARD_GPIO_POLLED
 	$|scripts/config --file $@ -M LEDS_MENF21BMC LEDS_APU2
@@ -50,6 +53,7 @@ $(KCFG): | $(KSRC)
 	$|scripts/config --file $@ -m SPI_SPIDEV
 	$|scripts/config --file $@ -M SPI_GPIO SPI_GPIO_CUSTOM
 	$|scripts/config --file $@ -M W1_MASTER_GPIO W1_MASTER_GPIO_CUSTOM
+	$(MAKE) -C $(KSRC) olddefconfig
 
 $(KTAR):
 	sudo apt-get install build-essential linux-source quilt

@@ -1,4 +1,5 @@
 bugfix/all/igb-e1000e-fix-lock-at-update-stats.patch
+bugfix/all/gpio-gpiolib-no-warn-on-bit-banging.patch
 features/all/leds-apu2-add-support.patch
 features/all/ledtrig-netdev-add-support.patch
 features/all/ledtrig-morse-add-support.patch

@@ -1,6 +1,7 @@
 # Version 1.0.0 (2017-08-24)
 
   * Fixed igb/e1000e hung at stats update.
+  * Fixed high debug output when GPIO bit banging.
   * Enabled following modules:
       - gpio-keys-polled
   * Added APU2 drivers:

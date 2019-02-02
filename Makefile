@@ -32,6 +32,7 @@ clean:
 
 .PHONY: distclean
 distclean: clean
+	rm -f db.txt
 	rm -rf $(KSRC)
 
 $(KSRC): db.txt | $(KTAR)

@@ -1,4 +1,4 @@
-# Copyright (c) 2017 Rouven Spreckels <n3vu0r@qu1x.org>
+# Copyright (c) 2017-2019 Rouven Spreckels <n3vu0r@qu1x.org>
 #
 # Usage of the works is permitted provided that
 # this instrument is retained with the works, so that
@@ -34,11 +34,15 @@ clean:
 distclean: clean
 	rm -rf $(KSRC)
 
-$(KSRC): | $(KTAR)
+$(KSRC): db.txt | $(KTAR)
 	tar -xaf $|
 	cp db.txt $@/net/wireless
 	cp -R debian $@
 	cd $@ && quilt --quiltrc ../quiltrc push -a
+
+db.txt:
+	wget https://git.kernel.org/pub/scm/linux/kernel/git/sforshee/\
+wireless-regdb.git/plain/db.txt
 
 $(KCFG): | $(KSRC)
 	cp /boot/config-$(KREL) $(KCFG)

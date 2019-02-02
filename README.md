@@ -18,7 +18,7 @@ sudo dpkg -i linux-{image,headers}-$(uname -r)_$(uname -r)-1_amd64.deb
 
 ## License
 
-Copyright (c) 2017 Rouven Spreckels <n3vu0r@qu1x.org>
+Copyright (c) 2017-2019 Rouven Spreckels <n3vu0r@qu1x.org>
 
 Usage of the works is permitted provided that
 this instrument is retained with the works, so that

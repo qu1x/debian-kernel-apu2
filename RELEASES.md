@@ -1,4 +1,4 @@
-# Version 1.0.0 (2017-08-24)
+# Version 1.0.0 (2019-02-02)
 
   * Fixed igb/e1000e hung at stats update.
   * Fixed high debug output when GPIO bit banging.
@@ -14,5 +14,6 @@
       - spi-gpio-custom
       - i2c-gpio-custom
       - w1-gpio-custom
-  * Enabled and imported internal regulatory database making CRDA optional.
+  * Enabled internal regulatory database making CRDA optional. The latest
+    database will automatically be downloaded.
   * Enabled Dynamic Frequency Selection (DFS) for ath10k.

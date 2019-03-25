@@ -1,6 +1,6 @@
 --- a/drivers/gpio/Kconfig
 +++ b/drivers/gpio/Kconfig
-@@ -331,6 +331,13 @@ config GPIO_MXS
+@@ -387,6 +387,13 @@ config GPIO_MXS
  	select GPIO_GENERIC
  	select GENERIC_IRQ_CHIP
  
@@ -16,7 +16,7 @@
  	depends on GPIOLIB && CAVIUM_OCTEON_SOC
 --- a/drivers/gpio/Makefile
 +++ b/drivers/gpio/Makefile
-@@ -83,6 +83,7 @@ obj-$(CONFIG_GPIO_MSIC)		+= gpio-msic.o
+@@ -93,6 +93,7 @@ obj-$(CONFIG_GPIO_MT7621)		+= gpio-mt762
  obj-$(CONFIG_GPIO_MVEBU)        += gpio-mvebu.o
  obj-$(CONFIG_GPIO_MXC)		+= gpio-mxc.o
  obj-$(CONFIG_GPIO_MXS)		+= gpio-mxs.o
@@ -26,7 +26,7 @@
  obj-$(CONFIG_GPIO_PCA953X)	+= gpio-pca953x.o
 --- /dev/null
 +++ b/drivers/gpio/gpio-nct5104d.c
-@@ -0,0 +1,458 @@
+@@ -0,0 +1,460 @@
 +/*
 + * GPIO driver for NCT5104D
 + *
@@ -44,6 +44,8 @@
 +#include <linux/io.h>
 +#include <linux/gpio.h>
 +#include <linux/version.h>
++#include <linux/dmi.h>
++#include <linux/string.h>
 +
 +#define DRVNAME "gpio-nct5104d"
 +
@@ -62,8 +64,8 @@
 +#define SIO_LOCK_KEY		0xAA	/* Key to disable Super-I/O */
 +
 +#define SIO_NCT5104D_ID					0x1061	/* Chip ID */
-+#define SIO_PCENGINES_APU_NCT5104D_ID_B	0xc452	/* Chip ID */
-+#define SIO_PCENGINES_APU_NCT5104D_ID_C	0xc453	/* Chip ID */
++#define SIO_PCENGINES_APU_NCT5104D_ID1	0xc452	/* Chip ID */
++#define SIO_PCENGINES_APU_NCT5104D_ID2	0xc453	/* Chip ID */
 +
 +enum chips { nct5104d };
 +
@@ -153,14 +155,14 @@
 +				     unsigned offset, int value);
 +static void nct5104d_gpio_set(struct gpio_chip *chip, unsigned offset, int value);
 +
-+#define NCT5104D_GPIO_BANK(_base, _ngpio, _regbase)			\
++#define NCT5104D_GPIO_BANK(_bank, _base, _ngpio, _regbase)		\
 +	{								\
 +		.chip = {						\
-+			.label            = DRVNAME,			\
++			.label            = DRVNAME _bank,		\
 +			.owner            = THIS_MODULE,		\
 +			.direction_input  = nct5104d_gpio_direction_in,	\
 +			.get              = nct5104d_gpio_get,		\
-+			.direction_output = nct5104d_gpio_direction_out,	\
++			.direction_output = nct5104d_gpio_direction_out,\
 +			.set              = nct5104d_gpio_set,		\
 +			.base             = _base,			\
 +			.ngpio            = _ngpio,			\
@@ -173,8 +175,8 @@
 +#define gpio_data(base) (base + 1)
 +
 +static struct nct5104d_gpio_bank nct5104d_gpio_bank[] = {
-+	NCT5104D_GPIO_BANK(0 , 8, 0xE0),
-+	NCT5104D_GPIO_BANK(10, 8, 0xE4)
++	NCT5104D_GPIO_BANK("-bank-0", 0 , 8, 0xE0),
++	NCT5104D_GPIO_BANK("-bank-1", 10, 8, 0xE4)
 +};
 +
 +static int nct5104d_gpio_direction_in(struct gpio_chip *chip, unsigned offset)
@@ -378,8 +380,8 @@
 +	devid = superio_inw(addr, SIO_CHIPID);
 +	switch (devid) {
 +	case SIO_NCT5104D_ID:
-+	case SIO_PCENGINES_APU_NCT5104D_ID_B:
-+	case SIO_PCENGINES_APU_NCT5104D_ID_C:
++	case SIO_PCENGINES_APU_NCT5104D_ID1:
++	case SIO_PCENGINES_APU_NCT5104D_ID2:
 +		sio->type = nct5104d;
 +		/* enable GPIO0 and GPIO1 */
 +		superio_select(addr, SIO_LD_GPIO);

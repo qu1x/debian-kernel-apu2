@@ -4,6 +4,8 @@
 
 See [RELEASES](RELEASES.md) for included patches and features.
 
+**Now based on stretch-backports**
+
 ## Parallel Building
 
 ```sh

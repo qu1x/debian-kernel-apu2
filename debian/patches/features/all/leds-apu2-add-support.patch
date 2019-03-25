@@ -1,8 +1,24 @@
 --- a/drivers/leds/Kconfig
 +++ b/drivers/leds/Kconfig
-@@ -604,6 +604,16 @@ config LEDS_IS31FL32XX
- 	  LED controllers. They are I2C devices with multiple constant-current
- 	  channels, each with independent 256-level PWM control.
+@@ -59,12 +59,12 @@ config LEDS_AAT1290
+ 	 This option enables support for the LEDs on the AAT1290.
+ 
+ config LEDS_APU
+-	tristate "Front panel LED support for PC Engines APU/APU2/APU3 boards"
++	tristate "Front panel LED support for all PC Engines APU boards"
+ 	depends on LEDS_CLASS
+ 	depends on X86 && DMI
+ 	help
+-	  This driver makes the PC Engines APU/APU2/APU3 front panel LEDs
+-	  accessible from userspace programs through the LED subsystem.
++	  This driver makes the PC Engines APU front panel LEDs accessible from
++	  userspace programs via the LED subsystem.
+ 
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called leds-apu.
+@@ -681,6 +681,16 @@ config LEDS_SC27XX_BLTC
+ 	  This driver can also be built as a module. If so the module will be
+ 	  called leds-sc27xx-bltc.
  
 +config LEDS_APU2
 +	tristate "LED and Reset Button support for PC Engines APU2/APU3"
@@ -19,14 +35,14 @@
  config LEDS_BLINKM
 --- a/drivers/leds/Makefile
 +++ b/drivers/leds/Makefile
-@@ -69,6 +69,7 @@ obj-$(CONFIG_LEDS_POWERNV)		+= leds-powe
- obj-$(CONFIG_LEDS_SEAD3)		+= leds-sead3.o
+@@ -70,6 +70,7 @@ obj-$(CONFIG_LEDS_KTD2692)		+= leds-ktd2
+ obj-$(CONFIG_LEDS_POWERNV)		+= leds-powernv.o
  obj-$(CONFIG_LEDS_IS31FL319X)		+= leds-is31fl319x.o
  obj-$(CONFIG_LEDS_IS31FL32XX)		+= leds-is31fl32xx.o
 +obj-$(CONFIG_LEDS_APU2)			+= leds-apu2.o
  obj-$(CONFIG_LEDS_PM8058)		+= leds-pm8058.o
  obj-$(CONFIG_LEDS_MLXCPLD)		+= leds-mlxcpld.o
- 
+ obj-$(CONFIG_LEDS_MLXREG)		+= leds-mlxreg.o
 --- /dev/null
 +++ b/drivers/leds/leds-apu2.c
 @@ -0,0 +1,392 @@

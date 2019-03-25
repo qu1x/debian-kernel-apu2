@@ -1,6 +1,6 @@
 --- a/drivers/leds/trigger/Kconfig
 +++ b/drivers/leds/trigger/Kconfig
-@@ -65,6 +65,13 @@ config LEDS_TRIGGER_NETDEV
+@@ -129,4 +129,14 @@ config LEDS_TRIGGER_NETDEV
  	  This allows LEDs to be controlled by network device activity.
  	  If unsure, say Y.
  
@@ -8,372 +8,305 @@
 +	tristate "LED Morse Trigger"
 +	depends on LEDS_TRIGGERS
 +	help
-+	  This allows LEDs to send messages in Morse code.
++	  This allows to send a morse code through LEDs.
++	  It is useful especially in embedded systems when there is only
++	  little interface to tell the user error or status codes. Sending
++	  a morse code can be an alternative here.
 +	  If unsure, say Y.
 +
- config LEDS_TRIGGER_BACKLIGHT
- 	tristate "LED backlight Trigger"
- 	depends on LEDS_TRIGGERS
+ endif # LEDS_TRIGGERS
 --- a/drivers/leds/trigger/Makefile
 +++ b/drivers/leds/trigger/Makefile
-@@ -4,6 +4,7 @@ obj-$(CONFIG_LEDS_TRIGGER_DISK)		+= ledt
- obj-$(CONFIG_LEDS_TRIGGER_MTD)		+= ledtrig-mtd.o
- obj-$(CONFIG_LEDS_TRIGGER_HEARTBEAT)	+= ledtrig-heartbeat.o
+@@ -13,3 +13,4 @@ obj-$(CONFIG_LEDS_TRIGGER_TRANSIENT)	+=
+ obj-$(CONFIG_LEDS_TRIGGER_CAMERA)	+= ledtrig-camera.o
+ obj-$(CONFIG_LEDS_TRIGGER_PANIC)	+= ledtrig-panic.o
  obj-$(CONFIG_LEDS_TRIGGER_NETDEV)	+= ledtrig-netdev.o
 +obj-$(CONFIG_LEDS_TRIGGER_MORSE)	+= ledtrig-morse.o
- obj-$(CONFIG_LEDS_TRIGGER_BACKLIGHT)	+= ledtrig-backlight.o
- obj-$(CONFIG_LEDS_TRIGGER_GPIO)		+= ledtrig-gpio.o
- obj-$(CONFIG_LEDS_TRIGGER_CPU)		+= ledtrig-cpu.o
 --- /dev/null
 +++ b/drivers/leds/trigger/ledtrig-morse.c
-@@ -0,0 +1,365 @@
+@@ -0,0 +1,300 @@
++// SPDX-License-Identifier: GPL-2.0
 +/*
-+ *  LED Morse Trigger
++ * ledtrig-morse: LED Morse Trigger
 + *
-+ *  Copyright (C) 2007 Gabor Juhos <juhosg at openwrt.org>
++ * send a string as morse code out through LEDs
 + *
-+ *  This file was based on: drivers/led/ledtrig-timer.c
-+ *	Copyright 2005-2006 Openedhand Ltd.
-+ *	Author: Richard Purdie <rpurdie@openedhand.com>
++ * can be used to send error codes or messages
 + *
-+ *  also based on the patch '[PATCH] 2.5.59 morse code panics' posted
-+ *  in the LKML by Tomas Szepe at Thu, 30 Jan 2003
-+ *	Copyright (C) 2002 Andrew Rodland <arodland@noln.com>
-+ *	Copyright (C) 2003 Tomas Szepe <szepe@pinerecords.com>
++ * string to be send is written into morse_string
++ * supported are letters and digits
 + *
-+ *  This program is free software; you can redistribute it and/or modify it
-+ *  under the terms of the GNU General Public License version 2 as published
-+ *  by the Free Software Foundation.
++ * Author: Andreas Klinger <ak@it-klinger.de>
 + *
 + */
 +
-+#include <linux/kernel.h>
-+#include <linux/version.h>
 +#include <linux/module.h>
-+#include <linux/jiffies.h>
++#include <linux/kernel.h>
 +#include <linux/init.h>
-+#include <linux/list.h>
-+#include <linux/spinlock.h>
 +#include <linux/device.h>
-+#include <linux/timer.h>
 +#include <linux/ctype.h>
-+#include <linux/leds.h>
 +#include <linux/slab.h>
++#include <linux/delay.h>
++#include <linux/workqueue.h>
++#include <linux/leds.h>
 +
-+#include "../leds.h"
 +
-+#define MORSE_DELAY_BASE	(HZ/2)
++#define MORSE_DOT_UNIT_DEFAULT	500
++#define MORSE_TELEGRAM_SIZE	100
 +
-+#define MORSE_STATE_BLINK_START	0
-+#define MORSE_STATE_BLINK_STOP	1
-+
-+#define MORSE_DIT_LEN	1
-+#define MORSE_DAH_LEN	3
-+#define MORSE_SPACE_LEN	7
-+
-+struct morse_trig_data {
-+	unsigned long delay;
-+	char *msg;
-+
-+	unsigned char morse;
-+	unsigned char state;
-+	char *msgpos;
-+	struct timer_list timer;
++struct morse_data {
++	unsigned int		dot_unit;
++	struct led_classdev	*led_cdev;
++	struct work_struct	work;
++	char			telegram[MORSE_TELEGRAM_SIZE];
++	unsigned int		telegram_size;
++	struct mutex		lock;
 +};
 +
-+const unsigned char morsetable[] = {
-+	0122, 0, 0310, 0, 0, 0163,				/* "#$%&' */
-+	055, 0155, 0, 0, 0163, 0141, 0152, 0051, 		/* ()*+,-./ */
-+	077, 076, 074, 070, 060, 040, 041, 043, 047, 057,	/* 0-9 */
-+	0107, 0125, 0, 0061, 0, 0114, 0, 			/* :;<=>?@ */
-+	006, 021, 025, 011, 002, 024, 013, 020, 004,		/* A-I */
-+	036, 015, 022, 007, 005, 017, 026, 033, 012,		/* J-R */
-+	010, 003, 014, 030, 016, 031, 035, 023,			/* S-Z */
-+	0, 0, 0, 0, 0154					/* [\]^_ */
++struct morse_char {
++	char	c;
++	char	*z;
 +};
 +
-+static inline unsigned char tomorse(char c) {
-+	if (c >= 'a' && c <= 'z')
-+		c = c - 'a' + 'A';
-+	if (c >= '"' && c <= '_') {
-+		return morsetable[c - '"'];
-+	} else
-+		return 0;
++static struct morse_char morse_table[] = {
++	{'a', ".-"},
++	{'b', "-..."},
++	{'c', "-.-."},
++	{'d', "-.."},
++	{'e', "."},
++	{'f', "..-."},
++	{'g', "--."},
++	{'h', "...."},
++	{'i', ".."},
++	{'j', ".---"},
++	{'k', "-.-"},
++	{'l', ".-.."},
++	{'m', "--"},
++	{'n', "-."},
++	{'o', "---"},
++	{'p', ".--."},
++	{'q', "--.-"},
++	{'r', ".-."},
++	{'s', "..."},
++	{'t', "-"},
++	{'u', "..-"},
++	{'v', "...-"},
++	{'w', ".--"},
++	{'x', "-..-"},
++	{'y', "-.--"},
++	{'z', "--.."},
++	{'1', ".----"},
++	{'2', "..---"},
++	{'3', "...--"},
++	{'4', "....-"},
++	{'5', "....."},
++	{'6', "-...."},
++	{'7', "--..."},
++	{'8', "---.."},
++	{'9', "----."},
++	{'0', "-----"},
++	{0, NULL},
++};
++
++static void morse_long(struct led_classdev *led_cdev)
++{
++	struct morse_data *data = led_cdev->trigger_data;
++
++	led_set_brightness(led_cdev, LED_ON);
++	msleep(3 * data->dot_unit);
++	led_set_brightness(led_cdev, LED_OFF);
++	msleep(data->dot_unit);
 +}
 +
-+static inline unsigned long dit_len(struct morse_trig_data *morse_data)
++static void morse_short(struct led_classdev *led_cdev)
 +{
-+	return MORSE_DIT_LEN*morse_data->delay;
++	struct morse_data *data = led_cdev->trigger_data;
++
++	led_set_brightness(led_cdev, LED_ON);
++	msleep(data->dot_unit);
++	led_set_brightness(led_cdev, LED_OFF);
++	msleep(data->dot_unit);
 +}
 +
-+static inline unsigned long dah_len(struct morse_trig_data *morse_data)
++static void morse_letter_space(struct led_classdev *led_cdev)
 +{
-+	return MORSE_DAH_LEN*morse_data->delay;
++	struct morse_data *data = led_cdev->trigger_data;
++	/*
++	 * Pause: 3 dot spaces
++	 * 1 dot space already there from morse character
++	 */
++	msleep(2 * data->dot_unit);
 +}
 +
-+static inline unsigned long space_len(struct morse_trig_data *morse_data)
++static void morse_word_space(struct led_classdev *led_cdev)
 +{
-+	return MORSE_SPACE_LEN*morse_data->delay;
++	struct morse_data *data = led_cdev->trigger_data;
++	/*
++	 * Pause: 7 dot spaces
++	 * 1 dot space already there from morse character
++	 * 2 dot spaces already there from letter space
++	 */
++	msleep(4 * data->dot_unit);
 +}
 +
-+static void morse_timer_function(unsigned long data)
++static void morse_send_char(struct led_classdev *led_cdev, char ch)
 +{
-+	struct led_classdev *led_cdev = (struct led_classdev *)data;
-+	struct morse_trig_data *morse_data = led_cdev->trigger_data;
-+	unsigned long brightness = LED_OFF;
-+	unsigned long delay = 0;
++	unsigned int i = 0;
 +
-+	if (!morse_data->msg)
-+		goto set_led;
++	while ((morse_table[i].c) && (morse_table[i].c != tolower(ch)))
++		i++;
 +
-+	switch (morse_data->state) {
-+	case MORSE_STATE_BLINK_START:
-+		/* Starting a new blink.  We have a valid code in morse. */
-+		delay = (morse_data->morse & 001) ? dah_len(morse_data):
-+			dit_len(morse_data);
-+		brightness = LED_FULL;
-+		morse_data->state = MORSE_STATE_BLINK_STOP;
-+		morse_data->morse >>= 1;
-+		break;
-+	case MORSE_STATE_BLINK_STOP:
-+		/* Coming off of a blink. */
-+		morse_data->state = MORSE_STATE_BLINK_START;
++	if (morse_table[i].c) {
++		unsigned int j = 0;
 +
-+		if (morse_data->morse > 1) {
-+			/* Not done yet, just a one-dit pause. */
-+			delay = dit_len(morse_data);
-+			break;
++		while (morse_table[i].z[j]) {
++			switch (morse_table[i].z[j]) {
++			case '.':
++				morse_short(led_cdev);
++				break;
++			case '-':
++				morse_long(led_cdev);
++				break;
++			}
++			j++;
 +		}
-+
-+		/* Get a new char, figure out how much space. */
-+		/* First time through */
-+		if (!morse_data->msgpos)
-+			morse_data->msgpos = (char *)morse_data->msg;
-+
-+		if (!*morse_data->msgpos) {
-+			/* Repeating */
-+			morse_data->msgpos = (char *)morse_data->msg;
-+			delay = space_len(morse_data);
-+		} else {
-+			/* Inter-letter space */
-+			delay = dah_len(morse_data);
-+		}
-+
-+		if (!(morse_data->morse = tomorse(*morse_data->msgpos))) {
-+			delay = space_len(morse_data);
-+			/* And get us back here */
-+			morse_data->state = MORSE_STATE_BLINK_STOP;
-+		}
-+		morse_data->msgpos++;
-+		break;
++		morse_letter_space(led_cdev);
++	} else {
++		/*
++		 * keep it simple:
++		 * whenever there is an unrecognized character make a word
++		 * space
++		 */
++		morse_word_space(led_cdev);
 +	}
-+
-+	mod_timer(&morse_data->timer, jiffies + msecs_to_jiffies(delay));
-+
-+set_led:
-+	led_set_brightness(led_cdev, brightness);
 +}
 +
-+static ssize_t _morse_delay_show(struct led_classdev *led_cdev, char *buf)
++static void morse_work(struct work_struct *work)
 +{
-+	struct morse_trig_data *morse_data = led_cdev->trigger_data;
++	struct morse_data *data = container_of(work, struct morse_data, work);
++	unsigned int i;
 +
-+	sprintf(buf, "%lu\n", morse_data->delay);
++	mutex_lock(&data->lock);
 +
-+	return strlen(buf) + 1;
++	for (i = 0; i < data->telegram_size; i++)
++		morse_send_char(data->led_cdev, data->telegram[i]);
++
++	mutex_unlock(&data->lock);
 +}
 +
-+static ssize_t _morse_delay_store(struct led_classdev *led_cdev,
-+		const char *buf, size_t size)
++static ssize_t morse_string_store(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t size)
 +{
-+	struct morse_trig_data *morse_data = led_cdev->trigger_data;
-+	char *after;
-+	unsigned long state = simple_strtoul(buf, &after, 10);
-+	size_t count = after - buf;
-+	int ret = -EINVAL;
++	struct led_classdev *led_cdev = dev_get_drvdata(dev);
++	struct morse_data *data = led_cdev->trigger_data;
 +
-+	if (*after && isspace(*after))
-+		count++;
++	if (size >= sizeof(data->telegram))
++		return -E2BIG;
 +
-+	if (count == size) {
-+		morse_data->delay = state;
-+		mod_timer(&morse_data->timer, jiffies + 1);
-+		ret = count;
-+	}
++	mutex_lock(&data->lock);
 +
-+	return ret;
-+}
++	memcpy(data->telegram, buf, size);
++	data->telegram_size = size;
 +
-+static ssize_t _morse_msg_show(struct led_classdev *led_cdev, char *buf)
-+{
-+	struct morse_trig_data *morse_data = led_cdev->trigger_data;
++	mutex_unlock(&data->lock);
 +
-+	if (!morse_data->msg)
-+		sprintf(buf, "<none>\n");
-+	else
-+		sprintf(buf, "%s\n", morse_data->msg);
-+
-+	return strlen(buf) + 1;
-+}
-+
-+static ssize_t _morse_msg_store(struct led_classdev *led_cdev,
-+		const char *buf, size_t size)
-+{
-+	struct morse_trig_data *morse_data = led_cdev->trigger_data;
-+	char *m;
-+
-+	m = kmalloc(size, GFP_KERNEL);
-+	if (!m)
-+		return -ENOMEM;
-+
-+	memcpy(m,buf,size);
-+	m[size]='\0';
-+
-+	if (morse_data->msg)
-+		kfree(morse_data->msg);
-+
-+	morse_data->msg = m;
-+	morse_data->msgpos = NULL;
-+	morse_data->state = MORSE_STATE_BLINK_STOP;
-+
-+	mod_timer(&morse_data->timer, jiffies + 1);
++	schedule_work(&data->work);
 +
 +	return size;
 +}
 +
-+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
-+static ssize_t morse_delay_show(struct device *dev,
-+		struct device_attribute *attr, char *buf)
++static DEVICE_ATTR_WO(morse_string);
++
++static ssize_t dot_unit_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
 +{
 +	struct led_classdev *led_cdev = dev_get_drvdata(dev);
++	struct morse_data *data = led_cdev->trigger_data;
 +
-+	return _morse_delay_show(led_cdev, buf);
++	return sprintf(buf, "%u\n", data->dot_unit);
 +}
 +
-+static ssize_t morse_delay_store(struct device *dev,
++static ssize_t dot_unit_store(struct device *dev,
 +		struct device_attribute *attr, const char *buf, size_t size)
 +{
 +	struct led_classdev *led_cdev = dev_get_drvdata(dev);
++	struct morse_data *data = led_cdev->trigger_data;
++	unsigned long dot_unit;
++	ssize_t ret = -EINVAL;
 +
-+	return _morse_delay_store(led_cdev, buf, size);
++	ret = kstrtoul(buf, 10, &dot_unit);
++	if (ret)
++		return ret;
++
++	data->dot_unit = dot_unit;
++
++	return size;
 +}
 +
-+static ssize_t morse_msg_show(struct device *dev,
-+		struct device_attribute *attr, char *buf)
++static DEVICE_ATTR_RW(dot_unit);
++
++static int morse_trig_activate(struct led_classdev *led_cdev)
 +{
-+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-+
-+	return _morse_msg_show(led_cdev, buf);
-+}
-+
-+static ssize_t morse_msg_store(struct device *dev,
-+		struct device_attribute *attr, const char *buf, size_t size)
-+{
-+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
-+
-+	return _morse_msg_store(led_cdev, buf, size);
-+}
-+
-+static DEVICE_ATTR(delay, 0644, morse_delay_show, morse_delay_store);
-+static DEVICE_ATTR(message, 0644, morse_msg_show, morse_msg_store);
-+
-+#define led_device_create_file(leddev, attr) \
-+	device_create_file(leddev->dev, &dev_attr_ ## attr)
-+#define led_device_remove_file(leddev, attr) \
-+	device_remove_file(leddev->dev, &dev_attr_ ## attr)
-+
-+#else
-+static ssize_t morse_delay_show(struct class_device *dev, char *buf)
-+{
-+	struct led_classdev *led_cdev = class_get_devdata(dev);
-+
-+	return _morse_delay_show(led_cdev, buf);
-+}
-+
-+static ssize_t morse_delay_store(struct class_device *dev, const char *buf,
-+		size_t size)
-+{
-+	struct led_classdev *led_cdev = class_get_devdata(dev);
-+
-+	return _morse_delay_store(led_cdev, buf, size);
-+}
-+
-+static ssize_t morse_msg_show(struct class_device *dev, char *buf)
-+{
-+	struct led_classdev *led_cdev = class_get_devdata(dev);
-+
-+	return _morse_msg_show(led_cdev, buf);
-+}
-+
-+static ssize_t morse_msg_store(struct class_device *dev, const char *buf,
-+				size_t size)
-+{
-+	struct led_classdev *led_cdev = class_get_devdata(dev);
-+
-+	return _morse_msg_store(led_cdev, buf, size);
-+}
-+
-+static CLASS_DEVICE_ATTR(delay, 0644, morse_delay_show, morse_delay_store);
-+static CLASS_DEVICE_ATTR(message, 0644, morse_msg_show, morse_msg_store);
-+
-+#define led_device_create_file(leddev, attr) \
-+	class_device_create_file(leddev->class_dev, &class_device_attr_ ## attr)
-+#define led_device_remove_file(leddev, attr) \
-+	class_device_remove_file(leddev->class_dev, &class_device_attr_ ## attr)
-+
-+#endif
-+
-+static void morse_trig_activate(struct led_classdev *led_cdev)
-+{
-+	struct morse_trig_data *morse_data;
 +	int rc;
++	struct morse_data *data;
 +
-+	morse_data = kzalloc(sizeof(*morse_data), GFP_KERNEL);
-+	if (!morse_data)
-+		return;
++	data = kzalloc(sizeof(struct morse_data), GFP_KERNEL);
++	if (!data) {
++		dev_err(led_cdev->dev, "unable to allocate morse trigger\n");
++		return -ENOMEM;
++	}
 +
-+	morse_data->delay = MORSE_DELAY_BASE;
-+	init_timer(&morse_data->timer);
-+	morse_data->timer.function = morse_timer_function;
-+	morse_data->timer.data = (unsigned long)led_cdev;
++	led_cdev->trigger_data = data;
++	data->led_cdev = led_cdev;
++	data->dot_unit = MORSE_DOT_UNIT_DEFAULT;
 +
-+	rc = led_device_create_file(led_cdev, delay);
-+	if (rc) goto err;
++	rc = device_create_file(led_cdev->dev, &dev_attr_morse_string);
++	if (rc)
++		goto err_out_data;
 +
-+	rc = led_device_create_file(led_cdev, message);
-+	if (rc) goto err_delay;
++	rc = device_create_file(led_cdev->dev, &dev_attr_dot_unit);
++	if (rc)
++		goto err_out_morse_string;
 +
-+	led_cdev->trigger_data = morse_data;
++	INIT_WORK(&data->work, morse_work);
 +
-+	return;
++	mutex_init(&data->lock);
 +
-+err_delay:
-+	led_device_remove_file(led_cdev, delay);
-+err:
-+	kfree(morse_data);
++	led_set_brightness(led_cdev, LED_OFF);
++	led_cdev->activated = true;
++
++	return rc;
++
++err_out_morse_string:
++	device_remove_file(led_cdev->dev, &dev_attr_morse_string);
++err_out_data:
++	kfree(data);
++
++	return rc;
 +}
 +
 +static void morse_trig_deactivate(struct led_classdev *led_cdev)
 +{
-+	struct morse_trig_data *morse_data = led_cdev->trigger_data;
++	struct morse_data *data = led_cdev->trigger_data;
 +
-+	if (!morse_data)
-+		return;
++	if (led_cdev->activated) {
 +
-+	led_device_remove_file(led_cdev, message);
-+	led_device_remove_file(led_cdev, delay);
++		cancel_work_sync(&data->work);
 +
-+	del_timer_sync(&morse_data->timer);
-+	if (morse_data->msg)
-+		kfree(morse_data->msg);
++		device_remove_file(led_cdev->dev, &dev_attr_morse_string);
++		device_remove_file(led_cdev->dev, &dev_attr_dot_unit);
 +
-+	kfree(morse_data);
++		kfree(data);
++
++		led_cdev->trigger_data = NULL;
++		led_cdev->activated = false;
++	}
 +}
 +
 +static struct led_trigger morse_led_trigger = {
-+	.name		= "morse",
-+	.activate	= morse_trig_activate,
-+	.deactivate	= morse_trig_deactivate,
++	.name     = "morse",
++	.activate = morse_trig_activate,
++	.deactivate = morse_trig_deactivate,
 +};
 +
 +static int __init morse_trig_init(void)
@@ -389,6 +322,6 @@
 +module_init(morse_trig_init);
 +module_exit(morse_trig_exit);
 +
-+MODULE_AUTHOR("Gabor Juhos <juhosg at openwrt.org>");
-+MODULE_DESCRIPTION("Morse LED trigger");
++MODULE_AUTHOR("Andreas Klinger <ak@it-klinger.de>");
++MODULE_DESCRIPTION("Morse code LED trigger");
 +MODULE_LICENSE("GPL");

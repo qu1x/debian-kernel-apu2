@@ -26,7 +26,7 @@
  obj-$(CONFIG_GPIO_PCA953X)	+= gpio-pca953x.o
 --- /dev/null
 +++ b/drivers/gpio/gpio-nct5104d.c
-@@ -0,0 +1,460 @@
+@@ -0,0 +1,458 @@
 +/*
 + * GPIO driver for NCT5104D
 + *
@@ -44,8 +44,6 @@
 +#include <linux/io.h>
 +#include <linux/gpio.h>
 +#include <linux/version.h>
-+#include <linux/dmi.h>
-+#include <linux/string.h>
 +
 +#define DRVNAME "gpio-nct5104d"
 +
@@ -64,8 +62,8 @@
 +#define SIO_LOCK_KEY		0xAA	/* Key to disable Super-I/O */
 +
 +#define SIO_NCT5104D_ID					0x1061	/* Chip ID */
-+#define SIO_PCENGINES_APU_NCT5104D_ID1	0xc452	/* Chip ID */
-+#define SIO_PCENGINES_APU_NCT5104D_ID2	0xc453	/* Chip ID */
++#define SIO_PCENGINES_APU_NCT5104D_ID_B	0xc452	/* Chip ID */
++#define SIO_PCENGINES_APU_NCT5104D_ID_C	0xc453	/* Chip ID */
 +
 +enum chips { nct5104d };
 +
@@ -158,7 +156,7 @@
 +#define NCT5104D_GPIO_BANK(_bank, _base, _ngpio, _regbase)		\
 +	{								\
 +		.chip = {						\
-+			.label            = DRVNAME _bank,		\
++			.label            = DRVNAME "-bank" _bank,	\
 +			.owner            = THIS_MODULE,		\
 +			.direction_input  = nct5104d_gpio_direction_in,	\
 +			.get              = nct5104d_gpio_get,		\
@@ -175,8 +173,8 @@
 +#define gpio_data(base) (base + 1)
 +
 +static struct nct5104d_gpio_bank nct5104d_gpio_bank[] = {
-+	NCT5104D_GPIO_BANK("-bank-0", 0 , 8, 0xE0),
-+	NCT5104D_GPIO_BANK("-bank-1", 10, 8, 0xE4)
++	NCT5104D_GPIO_BANK("0", 0 , 8, 0xE0),
++	NCT5104D_GPIO_BANK("1", 10, 8, 0xE4)
 +};
 +
 +static int nct5104d_gpio_direction_in(struct gpio_chip *chip, unsigned offset)
@@ -304,7 +302,6 @@
 +	/* For each GPIO bank, register a GPIO chip. */
 +	for (i = 0; i < data->nr_bank; i++) {
 +		struct nct5104d_gpio_bank *bank = &data->bank[i];
-+
 +#if LINUX_VERSION_CODE < KERNEL_VERSION(4,5,0)
 +		bank->chip.dev = &pdev->dev;
 +#else
@@ -380,8 +377,8 @@
 +	devid = superio_inw(addr, SIO_CHIPID);
 +	switch (devid) {
 +	case SIO_NCT5104D_ID:
-+	case SIO_PCENGINES_APU_NCT5104D_ID1:
-+	case SIO_PCENGINES_APU_NCT5104D_ID2:
++	case SIO_PCENGINES_APU_NCT5104D_ID_B:
++	case SIO_PCENGINES_APU_NCT5104D_ID_C:
 +		sio->type = nct5104d;
 +		/* enable GPIO0 and GPIO1 */
 +		superio_select(addr, SIO_LD_GPIO);
@@ -487,3 +484,4 @@
 +MODULE_DESCRIPTION("GPIO driver for Super-I/O chips NCT5104D");
 +MODULE_AUTHOR("Tasanakorn Phaipool <tasanakorn@gmail.com>");
 +MODULE_LICENSE("GPL");
++

@@ -1,4 +1,3 @@
-bugfix/all/gpio-gpiolib-no-warn-on-bit-banging.patch
 features/all/ledtrig-morse-add-support.patch
 features/all/gpio-nct5104d-add-support.patch
 features/all/i2c-gpio-custom-add-support.patch
